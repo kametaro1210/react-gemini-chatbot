@@ -1,0 +1,59 @@
+.conversation-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  margin: 4px 8px;
+  border-radius: 6px;
+  text-decoration: none;
+  color: var(--color-text-main);
+  transition: background-color 0.2s ease;
+  font-size: 14px;
+  gap: 8px;
+}
+
+.conversation-item:hover {
+  background-color: #e5e5e5;
+}
+
+.conversation-item.active {
+  background-color: #ffffff;
+  font-weight: 500;
+}
+
+.conversation-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.delete-btn {
+  opacity: 0;
+  transition:
+    opacity 0.2s ease,
+    background-color 0.2s ease,
+    color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.conversation-item:hover .delete-btn {
+  opacity: 1;
+}
+
+/* Helper class */
+.btn-icon {
+  background-color: transparent;
+  color: var(--color-text-sub);
+  padding: 4px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-icon:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: var(--color-error);
+}
