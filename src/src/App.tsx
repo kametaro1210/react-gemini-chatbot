@@ -1,9 +1,10 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom"
-
-
+import Signin from './pages/Signin';
+import Signup from './pages/Signup';
+import Chat from './pages/Chat';
+import ChatContainer from './components/Chat/ChatContainer';
 
 function App() {
-
     return (
 
     // BrowserRouterでアプリ全体を囲み、ブラウザのURLに応じた画面切り替えを有効にする
