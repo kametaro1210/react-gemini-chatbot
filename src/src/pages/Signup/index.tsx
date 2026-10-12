@@ -1,7 +1,9 @@
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import './index.css';
 import { useState } from 'react';
 import { authRepository } from '../../modules/auth/auth.repository';
+import { useAtom } from 'jotai';
+import { currentUserAtom } from '../../modules/auth/current-user.state';
 
 export default function Signup() {
 
@@ -14,6 +16,9 @@ export default function Signup() {
     // 通信中かどうかを判定するフラグをfalse（通信していない状態）で初期化し、
     // 状態を切り替える処理を準備する
     const [isLoading, setIsLoading] = useState(false);
+
+    // ログイン中のユーザー情報の取得と更新関数を定義する
+    const [currentUser, setCurrentUser] = useAtom(currentUserAtom);
 
     /* 
       ユーザー登録処理を行うための非同期関数
@@ -36,6 +41,7 @@ export default function Signup() {
         email,
         password,
       );
+      setCurrentUser(user);
       console.log('ユーザー登録成功:', user, token);
     } catch (error) {
       console.error(error);
@@ -44,6 +50,9 @@ export default function Signup() {
       setIsLoading(false);
     }
   };
+
+  // ログイン済みの場合はトップページにリダイレクト
+  if (currentUser) return <Navigate to="/" />;
 
   return (
     <div className="auth-container">

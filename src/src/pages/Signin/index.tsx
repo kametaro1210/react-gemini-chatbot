@@ -1,18 +1,22 @@
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import './index.css';
 import { authRepository } from '../../modules/auth/auth.repository';
 import { useState } from 'react';
+import { useAtom } from 'jotai';
+import { currentUserAtom } from '../../modules/auth/current-user.state';
 
 export default function Signin() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [currentUser, setCurrentUser] = useAtom(currentUserAtom);
 
     const signin = async () => {
     setIsLoading(true);
     try {
       const { user, token } = await authRepository.signin(email, password);
+      setCurrentUser(user);
       console.log('ログイン成功:', user, token);
     } catch (error) {
       console.error(error);
@@ -21,6 +25,9 @@ export default function Signin() {
       setIsLoading(false);
     }
   };
+
+  // ログイン済みの場合はトップページにリダイレクト
+  if (currentUser) return <Navigate to="/" />;
 
   return (
     <div className="auth-container">
