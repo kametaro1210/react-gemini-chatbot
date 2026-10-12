@@ -17,6 +17,11 @@ export default function Signin() {
     try {
       const { user, token } = await authRepository.signin(email, password);
       setCurrentUser(user);
+
+      // ユーザー情報とトークンをローカルストレージに保存することで、
+      // ページをリロードしてもログイン状態を維持できるようにする
+      localStorage.setItem('token', token);
+      
       console.log('ログイン成功:', user, token);
     } catch (error) {
       console.error(error);

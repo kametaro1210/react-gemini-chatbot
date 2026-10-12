@@ -57,4 +57,25 @@ export const authRepository = {
         const { user, token } = result.data;
         return { user: new User(user), token };
     },
+
+/* 
+    現在ログイン中のユーザー情報の取得処理
+    
+    【処理概要】
+    バックエンドのAPIにリクエストを送信して、現在のアクセストークンに対応するユーザー情報を取得します。
+    非同期処理の結果として、ユーザー情報（User クラスのインスタンス）または未取得の場合は undefined を返却します。
+    
+    【処理フロー】
+    1. GET /auth/me エンドポイントへAPIリクエストを送信する。
+    2. await を使い、サーバーからのレスポンス（Promiseの完了）を待機する。
+    3. レスポンスデータが存在しない場合は undefined を返却する。
+    4. 取得したユーザーデータを User クラスのインスタンスに変換して返却する。
+*/
+
+    async getCurrentUser(): Promise<User | undefined> {
+        const result = await api.get('/auth/me');
+        if (!result.data) return undefined;
+
+        return new User(result.data);
+    },
 };
