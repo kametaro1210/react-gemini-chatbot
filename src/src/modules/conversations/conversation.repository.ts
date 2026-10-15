@@ -14,4 +14,9 @@ export const conversationRepository = {
         const { data } = await api.get('/conversations');
         return data.map((item: Conversation) => new Conversation(item));
     },
+
+    // 指定したIDの会話（部屋）を削除するAPIを呼び出す
+    async delete(id: string): Promise<void> {
+        await api.delete(`/conversations/${id}`);
+    },
 };
