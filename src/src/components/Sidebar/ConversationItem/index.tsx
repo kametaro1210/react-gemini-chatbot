@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { HiOutlineTrash } from 'react-icons/hi2';
 import './index.css';
 import { useSetAtom } from 'jotai';
@@ -25,6 +25,15 @@ export default function ConversationItem({
   conversation,
 }: ConversationItemProps) {
 
+// URLのパスパラメータから conversationId を取得する
+    const { conversationId } = useParams();
+
+    // 現在開いている会話（部屋）のIDと、対象の会話IDが一致しているかどうかを判定する
+    const isActive = conversationId === conversation.id;
+
+    // 画面遷移（ページ移動）を行うための navigate 関数を取得する
+    const navigate = useNavigate();
+
     // チャットの会話一覧（conversationsAtom）のデータを更新する処理を取得
     const setConversations = useSetAtom(conversationsAtom);
 
@@ -35,6 +44,7 @@ export default function ConversationItem({
     if (!window.confirm('この会話を削除しますか？')) return;
 
     try {
+      
       // データベースから該当の会話を削除するAPIリクエストを送信
       await conversationRepository.delete(conversation.id);
 
@@ -42,6 +52,12 @@ export default function ConversationItem({
       setConversations((prev) =>
         prev.filter((item) => item.id !== conversation.id),
       );
+
+      // 削除した会話が現在開いている会話（部屋）だった場合、トップページに遷移する
+      if (isActive) {
+        navigate('/');
+      }
+
     } catch (error) {
       console.error(error);
       alert('会話の削除に失敗しました');
@@ -49,7 +65,10 @@ export default function ConversationItem({
   };
 
   return (
-    <Link to={`/chats/${conversation.id}`} className="conversation-item">
+    <Link
+      to={`/chats/${conversation.id}`}
+      className={`conversation-item ${isActive ? 'active' : ''}`}
+    >
 
       <div className="conversation-title">
         {conversation.title || '新しい会話'}
