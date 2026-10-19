@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { Message } from '../../../modules/messages/message.entity';
 import './index.css';
 
@@ -21,6 +22,17 @@ interface MessageListProps {
 */
 
 export default function MessageList({ messages }: MessageListProps) {
+
+  // 一番下へスクロールするための目印となるdiv要素を参照するRef
+  // Memo : スクロール位置の基準にするため、対象のdiv要素（のDOM）をuseRefで保持しておく
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  // messages（メッセージ一覧）の変更を検知してuseEffectを発火させ、
+  // 画面の一番下（bottomRefの位置）までスムーズに自動スクロールさせる
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
   return (
 
     <div className="message-list">
@@ -54,6 +66,9 @@ export default function MessageList({ messages }: MessageListProps) {
           </div>
         );
       })}
+
+      {/* 一番下へのスクロール用の目印 */}
+      <div ref={bottomRef} /> 
 
     </div>
   );
