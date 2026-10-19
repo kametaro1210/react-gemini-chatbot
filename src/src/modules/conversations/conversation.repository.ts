@@ -15,6 +15,12 @@ export const conversationRepository = {
         return data.map((item: Conversation) => new Conversation(item));
     },
 
+    // 指定されたIDに一致する特定の会話（部屋）の詳細情報を取得するAPIを呼び出す
+    async findOne(id: string): Promise<Conversation> {
+        const { data } = await api.get(`/conversations/${id}`);
+        return new Conversation(data);
+    },
+
     // 指定したIDの会話（部屋）を削除するAPIを呼び出す
     async delete(id: string): Promise<void> {
         await api.delete(`/conversations/${id}`);
