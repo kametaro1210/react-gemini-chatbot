@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { ChatSession } from '@google/generative-ai';
+import { useEffect, useRef, useState } from 'react';
 import { HiOutlinePaperAirplane, HiOutlinePhoto } from 'react-icons/hi2';
 import { useParams } from 'react-router-dom';
-import { model } from '../../../lib/gemini';
+import { startChatSession } from '../../../lib/gemini';
 import { conversationRepository } from '../../../modules/conversations/conversation.repository';
 import type { Message } from '../../../modules/messages/message.entity';
 import { messageRepository } from '../../../modules/messages/message.repository';
@@ -28,6 +29,48 @@ export default function ChatContainer() {
   // AIから受信中のストリーミングテキストを保持する変数
   const [streamingText, setStreamingText] = useState('');
 
+  // 再描画でリセットせず、会話中のチャットセッションを保持する
+  const chatSessionRef = useRef<ChatSession | null>(null);
+
+  // ----------------------------------------------
+
+  /*
+    Geminiチャットセッションの初期化処理
+
+    【目的】
+    保存済みメッセージをGeminiが会話履歴として扱える形式に変換し、
+    その履歴を使ってチャットセッションを作成する。
+
+    【処理フロー】
+    1. 引数で受け取ったメッセージ配列をコピーする。
+    2. 作成日時を比較し、古いメッセージから順になるように並べる。
+    3. 各メッセージのroleをGemini用の'user'または'model'に変換し、
+        Gemini SDKの会話履歴形式に合わせてparts配列を作り、本文をtextとして設定する。
+        partsは発言の内容を表す配列で、テキストや画像などの情報を入れるための項目。
+    4. 変換した履歴をstartChatSessionに渡してセッションを作成する。
+    5. 作成したセッションをchatSessionRef.currentに保存し、送信時に利用できるようにする。
+  */
+
+  const initializeChatSession = (messages: Message[]) => {
+
+    // 保存済みメッセージを古い順に並べ、Gemini用の会話履歴に変換する
+    const history = [...messages]
+      .sort((fstMsg, secMsg) => {
+        // 2件の作成日時を比べ、古いメッセージが先になるようにする
+        const fstMsgCreatedAt = fstMsg.createdAt.getTime();
+        const secMsgCreatedAt = secMsg.createdAt.getTime();
+        return fstMsgCreatedAt - secMsgCreatedAt;
+      })
+      .map((message) => ({
+        role: message.role === 'user' ? 'user' : 'model',
+        parts: [{ text: message.content }],
+      }));
+
+    chatSessionRef.current = startChatSession(history);
+  };
+
+  // ----------------------------------------------
+
   /*
     会話履歴の読み込み処理
 
@@ -38,10 +81,11 @@ export default function ChatContainer() {
 
     【処理フロー】
     1. 初回表示後とconversationId変更後にuseEffectが動き、fetchMessagesを呼び出す。
-    2. void fetchMessages()で取得を始める。取得結果は関数内でstateに保存するため、戻り値は使わない。
+    2. void fetchMessages()でメッセージ取得を開始する。Promiseの戻り値はuseEffectから返さない。
     3. conversationIdがなければ終了し、あればfindOne()でその会話を取得する。
     4. 取得したmessagesをstateに保存する。データがなければ空配列を保存する。
-    5. 取得に失敗した場合はcatchでエラーをコンソールに出力する。
+    5. 同じmessagesをinitializeChatSessionに渡し、Gemini用の会話履歴を設定してチャットセッションを初期化する。
+    6. 取得や初期化でエラーが発生した場合はcatchでコンソールに出力する。
   */
 
   useEffect(() => {
@@ -53,6 +97,7 @@ export default function ChatContainer() {
       try {
         const conversation = await conversationRepository.findOne(conversationId);
         setMessages(conversation.messages || []);
+        initializeChatSession(conversation.messages || []);
       } catch (error) {
         console.error(error);
       }
@@ -97,8 +142,17 @@ export default function ChatContainer() {
 
   const createAiMessage = async (content: string) => {
 
+    // 保存済みの会話履歴を使って、Geminiのチャットセッションを初期化する
+    initializeChatSession(messages);
+
+    // 初期化したチャットセッションを取得する
+    const chatSession = chatSessionRef.current;
+
+    // セッションがまだ初期化されていない場合は、送信処理を終了する
+    if (!chatSession) return;
+
     // AIモデルにメッセージを送信し、ストリーミング形式で応答を取得する
-    const result = await model.generateContentStream(content);
+    const result = await chatSession.sendMessageStream(content);
     // console.log(result.response.text());
 
     let fullText = '';
@@ -123,7 +177,7 @@ export default function ChatContainer() {
     // 処理が完了したら、ストリーミングテキストをリセット
     setStreamingText(''); 
     
-    console.log(aiMessage);
+    // console.log(aiMessage);
 
   }
 

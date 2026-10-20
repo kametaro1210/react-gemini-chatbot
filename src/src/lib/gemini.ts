@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, type Content } from '@google/generative-ai';
 
 // 環境変数（Viteの仕組み）からGeminiのAPIキーを取得する
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string;
@@ -7,7 +7,7 @@ const API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string;
 const genAi = new GoogleGenerativeAI(API_KEY);
 
 // 使用するモデルの設定とインスタンスのエクスポート
-export const model = genAi.getGenerativeModel({
+const model = genAi.getGenerativeModel({
 
   // 使用するGeminiのモデル名を指定
   model: 'gemini-3.5-flash-lite',
@@ -16,3 +16,8 @@ export const model = genAi.getGenerativeModel({
   // model: 'gemini-3.5-flash',
   // model: 'gemini-3.5-pro',
 });
+
+
+export const startChatSession = (history: Content[]) => {
+  return model.startChat({ history });
+};

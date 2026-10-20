@@ -1,0 +1,145 @@
+
+======================================
+Geminiの会話履歴の引き継ぎメモ
+======================================
+
+このメモでは、このプロジェクトでGeminiに会話履歴を渡す方法と、
+「初期化したチャットセッションを取得する」処理の意味を説明します。
+
+--------------------------------
+1. チャットセッションとは
+--------------------------------
+
+チャットセッションは、Geminiとの会話を行うためのオブジェクトです。
+このプロジェクトでは、Gemini SDKのstartChat()で作成し、
+sendMessageStream()を呼び出してメッセージを送り、AIの返信を受け取ります。
+
+通常の1回だけの文章生成と異なり、チャットセッションには会話履歴を渡せます。
+そのため、以前の発言を含む履歴をセッション作成時に設定すると、
+次に送るメッセージへの回答で、その履歴を会話の文脈として利用できます。
+
+--------------------------------
+2. 「初期化する」の意味
+--------------------------------
+
+ChatContainerのinitializeChatSession(messages)は、
+保存済みメッセージをGemini用の履歴形式に変換し、新しいチャットセッションを作成します。
+
+ここでいう「初期化」は、Geminiのモデルを起動し直したり、
+保存済みの会話を消したりする意味ではありません。
+
+過去のメッセージを設定した、新しい会話用セッションを準備することです。
+この処理により、Geminiへ過去の会話を渡せる状態になります。
+
+------------------------------------------
+3. chatSessionRef.currentに保存する理由
+------------------------------------------
+
+initializeChatSession()は作成したセッションを
+chatSessionRef.currentに保存します。
+
+useRefで作ったchatSessionRefは、コンポーネントが再描画されても値を保持します。
+また、currentの値を変更しても、それだけでは画面の再描画を発生させません。
+
+作成したセッションをrefに保存しておくことで、別の処理であるcreateAiMessage()から
+セッションを取り出し、sendMessageStream()を呼び出せます。
+
+「初期化したチャットセッションを取得する」とは、
+直前にrefへ保存したセッションを変数chatSessionに取り出すことです。
+
+const chatSession = chatSessionRef.current;
+
+この変数を使って、次のように今回のメッセージをGeminiへ送信します。
+
+const result = await chatSession.sendMessageStream(content);
+
+セッションがnullの場合は送信に使えないため、
+if (!chatSession) return;で以降の処理を終了します。
+
+---------------------------------------------------
+4. 会話履歴をGeminiへ渡す処理の流れ
+---------------------------------------------------
+
+1. 会話画面を開くと、conversationRepository.findOne()で会話を取得する。
+
+2. 取得した会話のmessagesをReactのstateに保存する。
+
+3. initializeChatSession(messages)に同じmessagesを渡す。
+
+4. initializeChatSession()がメッセージを古い順に並べ、
+   Gemini SDK用にroleとpartsを変換する。
+   
+5. startChatSession(history)が履歴付きのチャットセッションを作成する。
+
+6. 作成したセッションをchatSessionRef.currentに保存する。
+
+7. メッセージ送信時にcreateAiMessage()が履歴からセッションを作り直し、
+   chatSessionRef.currentからそのセッションを取り出す。
+   
+8. sendMessageStream(content)で今回の入力をGeminiへ送信する。
+   セッションに設定した過去の履歴と今回の入力をもとに、Geminiが回答を生成する。
+   
+9. 生成されたAIの回答をメッセージとして保存し、画面のmessagesにも追加する。
+
+会話の途中で送信するたびに、その時点のmessagesからセッションを作り直します。
+これにより、Reactのstateに反映された過去のユーザー発言とAIの回答を
+次の送信でも履歴として渡します。
+
+--------------------------------------------
+5. なぜユーザーの名前を答えられるのか
+--------------------------------------------
+
+例えばユーザーが「私の名前はゾウです」と送ると、その発言はroleが'user'の
+メッセージとしてバックエンドに保存され、画面のmessagesにも追加されます。
+
+次のメッセージを送ると、messagesに含まれる「私の名前はゾウです」も
+Gemini用の履歴に変換され、チャットセッションに渡されます。
+Geminiは今回の質問だけでなく、その履歴も文脈として見て回答を生成するため、
+「わたしのなまえは？」に対して「ゾウ」と回答できる場合があります。
+
+つまり、この実装では名前だけを特別な場所に記録しているわけではありません。
+名前を含む過去の発言そのものを会話履歴として再度Geminiへ渡しています。
+
+この記憶は、主に同じ会話の保存済み履歴に基づきます。
+別の会話の履歴は渡されないため、別の会話でも名前を覚えているとは限りません。
+また、AIの回答は生成結果なので、履歴があっても毎回正しく答える保証はありません。
+長い会話では、モデルが一度に扱える履歴量の上限などにより、
+古い情報が回答に反映されにくくなることもあります。
+
+--------------------------------
+6. 関連するファイル
+--------------------------------
+
+src/components/Chat/ChatContainer/index.tsx
+会話を取得し、Geminiのチャットセッションを作り、ユーザーのメッセージを送信します。
+createAiMessage()では会話履歴からセッションを準備し、
+sendMessageStream()でAIの回答を受け取ります。
+
+src/lib/gemini.ts
+Gemini SDKのモデルを設定し、startChatSession(history)を提供します。
+startChatSession()はhistoryをSDKのstartChat()へ渡してセッションを作成します。
+
+src/modules/conversations/conversation.repository.ts
+findOne()で、指定した会話とそのメッセージをAPIから取得します。
+
+src/modules/messages/message.repository.ts
+create()でユーザーまたはAIのメッセージをAPIへ保存します。
+
+----------------------
+全体の流れ（まとめ）
+----------------------
+
+会話の保存済みmessages
+  ↓
+initializeChatSession(messages)
+  ↓
+Gemini用の履歴に変換してstartChatSession(history)
+  ↓
+chatSessionRef.currentにセッションを保存
+  ↓
+createAiMessage()でセッションを取り出す
+  ↓
+sendMessageStream(今回の入力)
+  ↓
+履歴を文脈として使ったAIの回答
+
