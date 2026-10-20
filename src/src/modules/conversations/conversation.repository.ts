@@ -21,6 +21,12 @@ export const conversationRepository = {
         return new Conversation(data);
     },
 
+    // 指定した会話のタイトルをAPI経由でデータベースに更新・保存する
+    async updateTitle(id: string, title: string): Promise<Conversation> {
+        const { data } = await api.patch(`/conversations/${id}`, { title });
+        return new Conversation(data);
+    },
+
     // 指定したIDの会話（部屋）を削除するAPIを呼び出す
     async delete(id: string): Promise<void> {
         await api.delete(`/conversations/${id}`);

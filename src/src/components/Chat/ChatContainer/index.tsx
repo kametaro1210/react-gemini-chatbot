@@ -1,9 +1,11 @@
 import { ChatSession } from '@google/generative-ai';
+import { useSetAtom } from 'jotai';
 import { useEffect, useRef, useState } from 'react';
 import { HiOutlinePaperAirplane, HiOutlinePhoto } from 'react-icons/hi2';
 import { useParams } from 'react-router-dom';
-import { startChatSession } from '../../../lib/gemini';
+import { generateConversationTitle, startChatSession, } from '../../../lib/gemini';
 import { conversationRepository } from '../../../modules/conversations/conversation.repository';
+import { conversationsAtom } from '../../../modules/conversations/conversation.state';
 import type { Message } from '../../../modules/messages/message.entity';
 import { messageRepository } from '../../../modules/messages/message.repository';
 import MessageList from '../MessageList';
@@ -31,6 +33,9 @@ export default function ChatContainer() {
 
   // 再描画でリセットせず、会話中のチャットセッションを保持する
   const chatSessionRef = useRef<ChatSession | null>(null);
+
+  // 会話一覧（conversationsAtom）を新しく書き換える・保存するための関数を取得する
+  const setConversations = useSetAtom(conversationsAtom);
 
   // ----------------------------------------------
 
@@ -114,10 +119,17 @@ export default function ChatContainer() {
 
     setIsLoading(true);
 
+    const isFirstMessage = messages.length === 0;
+
     try {
       await createUserMessage(currentMessage);
       setInputText(''); // 入力欄を空にする
       await createAiMessage(currentMessage);
+
+      if (isFirstMessage) {
+        generateAndSaveTitle(currentMessage);
+      }
+
     } catch (error) {
       console.error(error);
       alert('メッセージの送信に失敗しました');
@@ -125,6 +137,45 @@ export default function ChatContainer() {
       setIsLoading(false);
     }
   };
+
+  // ----------------------------------------------------------------------------
+
+  /*
+    会話タイトルの生成・保存処理
+
+    【目的】
+    最初のメッセージをもとに会話タイトルを生成し、保存先と画面上の会話一覧を更新する。
+
+    【処理フロー】
+    1. メッセージをgenerateConversationTitleに渡し、Geminiでタイトルを生成する。
+    2. 生成したタイトルをconversationRepository.updateTitleに渡し、
+        対象の会話をデータベース上で更新する。
+    3. setConversationsで現在の会話一覧を受け取り、mapで各会話を確認する。
+    4. 対象の会話IDが更新後の会話IDと一致するかを判定する。
+        一致する場合は三項演算子（条件 ? 一致した場合 : 一致しない場合）で
+        更新後の会話に置き換え、一致しない場合は元の会話をそのまま残す。
+    5. mapで作成した新しい会話一覧をsetConversationsに渡して画面を更新する。
+  */
+
+  const generateAndSaveTitle = async (message: string) => {
+
+    const title = await generateConversationTitle(message);
+
+    const updatedConversation = await conversationRepository.updateTitle(
+      conversationId!,
+      title,
+    );
+
+    setConversations((prev) =>
+      prev.map((conversation) =>
+        conversation.id === updatedConversation.id
+          ? updatedConversation
+          : conversation,
+      ),
+    );
+  };
+
+  // ----------------------------------------------------------------------------
 
 
   const createUserMessage = async (content: string) => {
