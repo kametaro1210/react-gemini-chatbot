@@ -1,10 +1,13 @@
 import { useEffect, useRef } from 'react';
 import type { Message } from '../../../modules/messages/message.entity';
+import TypingIndicator from '../TypingIndicator';
 import './index.css';
 
 // MessageListが親コンポーネントから受け取るデータ（props）の形を定義する。
 interface MessageListProps {
   messages: Message[];
+  streamingText: string;
+  isStreaming: boolean;
 }
 
 /*
@@ -21,7 +24,11 @@ interface MessageListProps {
   4. contentがある場合だけ、本文を吹き出しとして表示する。
 */
 
-export default function MessageList({ messages }: MessageListProps) {
+export default function MessageList({ 
+  messages,
+  streamingText,
+  isStreaming,
+}: MessageListProps) {
 
   // 一番下へスクロールするための目印となるdiv要素を参照するRef
   // Memo : スクロール位置の基準にするため、対象のdiv要素（のDOM）をuseRefで保持しておく
@@ -66,6 +73,31 @@ export default function MessageList({ messages }: MessageListProps) {
           </div>
         );
       })}
+
+
+      {/* ストリーミング中、または表示するテキストがある場合にAIのメッセージ欄を表示 */}
+      {(isStreaming || streamingText) && (
+        <div className="message-item message-item-ai">
+          <div className="message-bubble message-ai">
+
+            {/* 受信したAIのテキストを表示 */}
+            {streamingText}
+
+            {/* ストリーミング中かつテキストがまだない場合に
+            ローディング表示（TypingIndicator）を行い、それ以外は何も描画しない */}
+            {(() => {
+              if (isStreaming && !streamingText) {
+                return <TypingIndicator />;
+              }
+              return null;
+            })()}
+
+            {/* 論理演算子で記述する場合 */}
+            {/* {isStreaming && !streamingText && <TypingIndicator />} */}
+
+          </div>
+        </div>
+      )}
 
       {/* 一番下へのスクロール用の目印 */}
       <div ref={bottomRef} /> 

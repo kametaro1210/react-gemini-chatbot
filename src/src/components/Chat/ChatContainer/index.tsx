@@ -25,6 +25,9 @@ export default function ChatContainer() {
   // NOTE: fetchMessages等で非同期取得したデータや新着メッセージで随時更新される
   const [messages, setMessages] = useState<Message[]>([]);
 
+  // AIから受信中のストリーミングテキストを保持する変数
+  const [streamingText, setStreamingText] = useState('');
+
   /*
     会話履歴の読み込み処理
 
@@ -94,18 +97,31 @@ export default function ChatContainer() {
 
   const createAiMessage = async (content: string) => {
 
-    // AIモデルにメッセージを送信し、応答を待ち、結果を取得する
-    const result = await model.generateContent(content);
-    console.log(result.response.text());
+    // AIモデルにメッセージを送信し、ストリーミング形式で応答を取得する
+    const result = await model.generateContentStream(content);
+    // console.log(result.response.text());
+
+    let fullText = '';
+
+    // AIから少しずつ届く文章のかけらを順番につなぎ合わせて、ひとつの文章にまとめる
+    // Memo : 返ってくる文章のかけら（chunk）を、順番に fullText に足していく
+    for await (const chunk of result.stream) {
+      const chunkText = chunk.text();
+      fullText += chunkText;
+      setStreamingText(fullText);
+    }
 
     const aiMessage = await messageRepository.create(conversationId!, {
       role: 'assistant',
-      content: result.response.text(),
+      content: fullText,
     });
 
     // 既存のメッセージ配列の末尾に、AIからの新しい返答メッセージを追加して状態を更新
     // Memo : prevは更新前のメッセージ配列を指し、aiMessageを末尾に加えた配列を返す
     setMessages((prev) => [...prev, aiMessage]);
+
+    // 処理が完了したら、ストリーミングテキストをリセット
+    setStreamingText(''); 
     
     console.log(aiMessage);
 
@@ -114,8 +130,13 @@ export default function ChatContainer() {
   return (
     <div className="chat-container">
       
-      {/* stateで管理しているメッセージ一覧を渡し、チャット履歴を表示する */}
-      <MessageList messages={messages} />
+      {/* 画面に表示するメッセージの一覧と、
+      AIから現在届いている文章をまとめて別のパーツ（MessageList）に渡す */}
+      <MessageList
+        messages={messages}
+        isStreaming={isLoading}
+        streamingText={streamingText}
+      />
 
       {/* Integrated Message Input Area */}
       <div className="message-input-container">
