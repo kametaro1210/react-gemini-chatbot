@@ -17,6 +17,8 @@ const model = genAi.getGenerativeModel({
   // model: 'gemini-3.5-pro',
 });
 
+// ---------------------------------------------------------
+
 /*
   Geminiチャットセッションの作成処理
 
@@ -28,11 +30,11 @@ const model = genAi.getGenerativeModel({
   2. 作成したチャットセッションを呼び出し元に返す。
 */
 
-// ---------------------------------------------------------
-
 export const startChatSession = (history: Content[]) => {
   return model.startChat({ history });
 };
+
+// ---------------------------------------------------------
 
 /*
   会話タイトルの生成処理
