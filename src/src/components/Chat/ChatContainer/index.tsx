@@ -37,6 +37,15 @@ export default function ChatContainer() {
   // 会話一覧（conversationsAtom）を新しく書き換える・保存するための関数を取得する
   const setConversations = useSetAtom(conversationsAtom);
 
+  // 選択された画像ファイルを保存する。未選択の間はnull。
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // 選択した画像を画面に表示するための一時URLを保存する。未表示の間はnull。
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  // ボタンからファイル選択欄を開き、clearFileで選択内容を空にするための参照。
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // ----------------------------------------------
 
   /*
@@ -139,6 +148,76 @@ export default function ChatContainer() {
   };
 
   // ----------------------------------------------------------------------------
+
+  /*
+    画像ファイルの選択処理
+
+    【目的】
+    ファイル選択欄で選ばれた画像を画面でプレビューできるようにし、
+    アップロード対象のファイルとして保存する。
+
+    【処理フロー】
+    1. eは、ファイル選択欄で選択内容が変わったときにReactから渡されるイベント情報。
+        Memo : React.ChangeEvent<HTMLInputElement>は、
+              「input要素で選択内容が変わったときのイベント情報」であることを示す型。
+              この型により、e.targetからファイル選択欄を参照できる。
+    2. e.target.filesは、ファイル選択欄で選ばれたファイルの一覧。
+        Memo : ?.はファイル一覧がない場合にエラーにならないようにし、
+              [0]で一覧の先頭（この画面で選択されたファイル）を取り出してfileに代入する。
+    3. ファイルが選択されていなければ処理を終了する。
+    4. ファイルの種類が画像でなければ、アラートを表示して処理を終了する。
+    5. 選択したファイルをselectedFileに保存する。
+    6. URL.createObjectURLでファイルを表示するための一時的なURLを作成し、
+        previewUrlに保存してプレビューに利用する。
+  */
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+
+    const file = e.target.files?.[0];
+
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('画像ファイルのみアップロード可能です');
+      return;
+    }
+
+    setSelectedFile(file);
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+  };
+
+  // ----------------------------------------------------------------------------
+
+  /*
+    選択済み画像のクリア処理
+
+    【目的】
+    選択した画像とプレビューを解除し、ファイル選択欄を初期状態に戻す。
+
+    【処理フロー】
+    1. プレビュー用の一時URLがあれば、URL.revokeObjectURLでそのURLを無効にする。
+        これにより、そのURLを通じて画像を読み込めなくなり、ブラウザが画像表示用に
+        確保していた一時的なリソースを片付けられるようにする。
+        選択元の画像ファイルを削除する処理ではない。
+    2. 選択ファイルとプレビューURLをそれぞれnullにして、画面表示をクリアする。
+    3. ファイル選択欄の値も空に戻す。これにより、同じ画像を選び直して
+        プレビューを再表示できるようにする。
+  */
+  const clearFile = () => {
+
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+
+    setSelectedFile(null);
+    setPreviewUrl(null);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+ // ----------------------------------------------------------------------------
 
   /*
     会話タイトルの生成・保存処理
@@ -245,30 +324,41 @@ export default function ChatContainer() {
 
       {/* Integrated Message Input Area */}
       <div className="message-input-container">
-        {/* Preview Area - Commented out or toggleable */}
-        {/* <div className="image-preview-container">
+        {previewUrl && (
+          <div className="image-preview-container">
             <div className="image-preview-wrapper">
-              <img src="" alt="preview" className="image-preview" />
-              <button className="image-preview-close" onClick={() => {}}>
+              <img src={previewUrl} alt="preview" className="image-preview" />
+              <button className="image-preview-close" onClick={clearFile}>
                 ×
               </button>
             </div>
-          </div> */}
+          </div>
+        )}
 
         <div className="message-input-wrapper">
+
           <input
             type="file"
             accept="image/*"
             style={{ display: 'none' }}
-            onChange={() => {}}
+
+            // ファイルが選択されたらhandleFileSelectを呼び出す。
+            onChange={handleFileSelect}
+
+            // fileInputRefはuseRefで作った「ファイル選択欄を直接操作するための参照」。
+            // この欄に結び付け、ボタンで開いたりclearFileで選択を解除したりする。
+            ref={fileInputRef}
           />
+          
           <button
             className="icon-button"
-            onClick={() => {}}
+            // /* ボタンを押すとファイル選択欄を開き、?で欄がまだ参照できない場合のエラーを防ぐ。
+            onClick={() => fileInputRef.current?.click()}
             title="画像をアップロード"
           >
             <HiOutlinePhoto size={24} />
           </button>
+          
           <textarea
             className="message-input"
             placeholder="AIにメッセージを送信する..."
