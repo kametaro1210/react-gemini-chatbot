@@ -1,4 +1,4 @@
-import { ChatSession } from '@google/generative-ai';
+import { ChatSession, type Part } from '@google/generative-ai';
 import { useSetAtom } from 'jotai';
 import { useEffect, useRef, useState } from 'react';
 import { HiOutlinePaperAirplane, HiOutlinePhoto } from 'react-icons/hi2';
@@ -8,6 +8,7 @@ import { conversationRepository } from '../../../modules/conversations/conversat
 import { conversationsAtom } from '../../../modules/conversations/conversation.state';
 import type { Message } from '../../../modules/messages/message.entity';
 import { messageRepository } from '../../../modules/messages/message.repository';
+import { uploadRepository } from '../../../modules/upload/upload.repository';
 import MessageList from '../MessageList';
 import './index.css';
 
@@ -121,6 +122,23 @@ export default function ChatContainer() {
     void fetchMessages();
   }, [conversationId]);
 
+    // ----------------------------------------------
+
+  /*
+    メッセージの送信処理
+
+    【目的】
+    入力されたメッセージと選択中の画像を送信し、ユーザーとAIのメッセージを会話に追加する。
+
+    【処理フロー】
+    1. 入力欄の前後の空白を取り除き、送信するメッセージを取得する。
+    2. ローディング状態にし、送信前のメッセージ一覧から初回送信かどうかを判定する。
+    3. createUserMessageを呼び出し、ユーザーのメッセージと選択画像を保存する。
+    4. 入力欄を空にし、選択中の画像をクリアしてからcreateAiMessageを呼び出す。
+    5. 初回送信の場合は、メッセージをもとに会話タイトルの生成・保存を開始する。
+    6. 送信処理でエラーが発生した場合は、コンソールに出力してエラーメッセージを表示する。
+    7. 成功・失敗にかかわらず、最後にローディング状態を解除する。
+  */
   const handleSend = async () => {
 
     // 入力欄（inputText）の前後の空白を削除してメッセージを取得
@@ -133,6 +151,7 @@ export default function ChatContainer() {
     try {
       await createUserMessage(currentMessage);
       setInputText(''); // 入力欄を空にする
+      clearFile();
       await createAiMessage(currentMessage);
 
       if (isFirstMessage) {
@@ -257,10 +276,30 @@ export default function ChatContainer() {
   // ----------------------------------------------------------------------------
 
 
+  /*
+    ユーザーメッセージの保存処理
+
+    【目的】
+    選択中の画像があればアップロードし、メッセージと画像URLを会話に保存して画面に反映する。
+
+    【処理フロー】
+    1. 画像が選択されている場合、uploadRepository.uploadImageに渡してアップロードし、画像URLを取得する。
+    2. conversationId、ユーザーのrole、本文、画像URLをmessageRepository.createに渡してメッセージを保存する。
+    3. 保存したメッセージを現在のmessagesの末尾に追加し、画面上の一覧を更新する。
+  */
+
   const createUserMessage = async (content: string) => {
+
+    let imageUrl;
+
+    if (selectedFile) {
+      imageUrl = await uploadRepository.uploadImage(selectedFile);
+    }
+
     const userMessage = await messageRepository.create(conversationId!, {
       role: 'user',
       content,
+      imageUrl
     });
 
     // 既存のメッセージ配列の末尾に、新しく送信されたユーザーのメッセージを追加して状態を更新
@@ -270,10 +309,37 @@ export default function ChatContainer() {
     console.log('User message created:', userMessage);
   };
 
+  // -------------------------------------------------------------------------------
+
+  /*
+    AIメッセージの生成・保存処理
+
+    【目的】
+    ユーザーのメッセージと選択画像をGeminiに送り、応答を画面に表示しながら会話に保存する。
+
+    【処理フロー】
+    1. 保存済みのmessagesを使ってGeminiのチャットセッションを初期化する。
+    2. 送信内容のparts配列を作り、本文を追加する。画像が選択されている場合は、
+        fileToGenerativePartでGeminiに渡せる形式に変換して配列に追加する。
+    3. chatSessionRef.currentからチャットセッションを取得する。
+        セッションがない場合は、以降の送信処理を終了する。
+    4. sendMessageStreamにpartsを渡し、Geminiから応答をストリーミングで受け取る。
+    5. 応答の各chunkからテキストを取り出してつなぎ、streamingTextを更新して画面に表示する。
+    6. 応答テキスト全体をassistantのメッセージとして保存し、messagesの末尾に追加する。
+    7. 応答の表示が完了したらstreamingTextを空にする。
+  */
+
   const createAiMessage = async (content: string) => {
 
     // 保存済みの会話履歴を使って、Geminiのチャットセッションを初期化する
     initializeChatSession(messages);
+
+    const parts: Array<string | Part> = [content];
+
+    if (selectedFile) {
+      const image = await fileToGenerativePart(selectedFile);
+      parts.push(image);
+    }
 
     // 初期化したチャットセッションを取得する
     const chatSession = chatSessionRef.current;
@@ -282,7 +348,7 @@ export default function ChatContainer() {
     if (!chatSession) return;
 
     // AIモデルにメッセージを送信し、ストリーミング形式で応答を取得する
-    const result = await chatSession.sendMessageStream(content);
+    const result = await chatSession.sendMessageStream(parts);
     // console.log(result.response.text());
 
     let fullText = '';
@@ -310,6 +376,37 @@ export default function ChatContainer() {
     // console.log(aiMessage);
 
   }
+
+  // ----------------------------------------------------------------------------------------------
+
+  /*
+    画像ファイルのGemini用データ変換処理
+
+    【目的】
+    画像ファイルをGeminiに送信できるインラインデータ形式に変換する。
+
+    【処理フロー】
+    1. Promiseを作成し、画像データの読み込みが完了したときにresolveで結果を受け取れるようにする。
+    2. FileReaderのreadAsDataURLで画像ファイルをData URLとして読み込む。
+    3. 読み込み完了時にonloadendが呼ばれ、reader.resultに格納されたData URLをカンマで分割する。
+        分割した配列の[1]から先頭の形式情報を除いたBase64形式の画像データを取り出し、
+        resolveに渡してPromiseの結果にする。
+    4. awaitでPromiseの完了を待ち、画像データとファイルのMIMEタイプをinlineDataに設定して返す。
+  */
+
+  const fileToGenerativePart = async (file: File) => {
+    const base64EncodedDataPromise = new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+      reader.readAsDataURL(file);
+    });
+    return {
+      inlineData: {
+        data: await base64EncodedDataPromise,
+        mimeType: file.type,
+      },
+    };
+  };
 
   return (
     <div className="chat-container">
@@ -369,8 +466,9 @@ export default function ChatContainer() {
           <button className="send-button" 
             onClick={handleSend}
 
-            // APIが通信中(isLoadingがtrue)、または入力欄が空白の場合は送信ボタンを無効化する
-            disabled={isLoading || (!inputText.trim())}
+            // APIが通信中(isLoadingがtrue)、または入力欄が空白の場合かつ画像が選択されていない
+            // 場合は送信ボタンを無効化する
+            disabled={isLoading || (!inputText.trim() && !selectedFile)}
           >
             <HiOutlinePaperAirplane size={24} />
           </button>
