@@ -59,6 +59,15 @@ export default function MessageList({
             <div
               className={`message-content-stack ${isUser ? 'stack-user' : 'stack-ai'}`}
             >
+              
+              {/* 画像URLが存在する場合のみ画像を表示 */}
+              {message.imageUrl && (
+                <img
+                  src={message.imageUrl}
+                  alt="upload image"
+                  className="message-image"
+                />
+              )}
 
               {/* message.contentがある場合だけ吹き出しを表示する */}
               {message.content && (
